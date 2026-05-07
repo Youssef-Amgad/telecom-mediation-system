@@ -1,7 +1,7 @@
 package db;
 
 import model.MediationRule;
-import model.MediationRule.Action;
+//import model.MediationRule.Action;
 import model.Node;
 
 import java.sql.*;
@@ -22,10 +22,7 @@ public class DBManager {
 
     private Connection connection;
 
-    // ─────────────────────────────────────────────
-    // CONNECTION
-    // ─────────────────────────────────────────────
-
+    // Connect
     public void connect() throws SQLException {
         LOG.info("Connecting to database...");
         connection = DriverManager.getConnection(DB_URL, DB_USER, DB_PASS);
@@ -55,7 +52,7 @@ public class DBManager {
         String sql = """
                 SELECT node_id, node_name, node_type,
                        ip_address, port, protocol,
-                       input_directory, active
+                       input_dir, active
                 FROM nodes
                 WHERE active = TRUE
                 ORDER BY node_id
@@ -98,14 +95,7 @@ public class DBManager {
                 SELECT rule_id,
                        source_node_id,
                        destination_node_id,
-                       call_type,
-                       action,
-                       priority,
-                       transform_expression,
-                       active
                 FROM mediation_rules
-                WHERE active = TRUE
-                ORDER BY priority ASC
                 """;
 
         try (PreparedStatement ps = connection.prepareStatement(sql);
@@ -118,12 +108,15 @@ public class DBManager {
                         rs.getInt("source_node_id"),
                         rs.getInt("destination_node_id")
                 );
-
-                rule.setCallType(rs.getString("call_type"));
-                rule.setAction(Action.valueOf(rs.getString("action")));
-                rule.setPriority(rs.getInt("priority"));
-                rule.setTransformExpression(rs.getString("transform_expression"));
-                rule.setActive(rs.getBoolean("active"));
+                rule.setRuleId(rs.getInt("rule_id"));
+                rule.setSourceNodeId(rs.getInt("source_node_id"));
+                rule.setDestinationNodeId(rs.getInt("destination_node_id"));
+               
+//                rule.setCallType(rs.getString("call_type"));
+//                rule.setAction(Action.valueOf(rs.getString("action")));
+//                rule.setPriority(rs.getInt("priority"));
+//                rule.setTransformExpression(rs.getString("transform_expression"));
+//                rule.setActive(rs.getBoolean("active"));
 
                 rules.add(rule);
             }
@@ -136,7 +129,7 @@ public class DBManager {
     // ─────────────────────────────────────────────
     // AUDIT / RUN LOG
     // ─────────────────────────────────────────────
-
+/*
     public void insertRunSummary(String runId,
                                  int totalRead,
                                  int totalPassed,
@@ -163,7 +156,7 @@ public class DBManager {
             LOG.log(Level.WARNING, "Failed to insert run summary", e);
         }
     }
-
+*/
     // ─────────────────────────────────────────────
     // HEALTH CHECK
     // ─────────────────────────────────────────────

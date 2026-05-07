@@ -1,6 +1,6 @@
-package NodeCollector;
+package collector;
 
-//import model.CDR;
+import model.CDR;
 import model.Node;
 import util.CsvUtil;
 
@@ -11,98 +11,98 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Responsible for collecting CDR files from registered nodes.
- *
- * For each active node it scans the configured input directory, reads every
- * CSV file it finds, parses it into {@link CDR} objects, and then moves the
- * processed file to an archive sub-folder so it is not re-processed.
+ * Runnable collector for a single Node (MSC / SMSC / PGW).
  */
-public class NodeCollector {
+public class NodeCollector implements Runnable {
 
-    private static final Logger LOG = Logger.getLogger(NodeCollector.class.getName());
-    private static final String ARCHIVE_DIR = "archive";
+    private static final Logger LOG =
+            Logger.getLogger(NodeCollector.class.getName());
 
-    private final List<Node> nodes;
+    private static final String ARCHIVE_DIR = "/app/archive";
 
-    public NodeCollector(List<Node> nodes) {
-        this.nodes = nodes;
+    private final Node node;
+
+    public NodeCollector(Node node) {
+        this.node = node;
     }
 
-    // ── Public API ───────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────
+    // THREAD ENTRY POINT
+    // ─────────────────────────────────────────────
 
-    /**
-     * Iterates over all active nodes, collects CDR files, and returns the
-     * full list of parsed CDRs.
-     */
-    public List<CDR> collectAll() {
-        List<CDR> allCdrs = new ArrayList<>();
+    @Override
+    public void run() {
+        try {
+            LOG.info("Starting collector for node: " + node.getNodeId());
 
-        for (Node node : nodes) {
-            if (!node.isActive()) {
-                LOG.info("Skipping inactive node: " + node.getNodeId());
-                continue;
-            }
-            try {
-                List<CDR> nodeCdrs = collectFromNode(node);
-                LOG.info(String.format("Collected %d CDRs from node %s",
-                        nodeCdrs.size(), node.getNodeId()));
-                allCdrs.addAll(nodeCdrs);
-            } catch (Exception e) {
-                LOG.log(Level.SEVERE, "Error collecting from node: " + node.getNodeId(), e);
-            }
+            List<CDR> cdrs = collectFromNode(node);
+
+            LOG.info("Node " + node.getNodeId()
+                    + " collected " + cdrs.size() + " CDRs");
+
+        } catch (Exception e) {
+            LOG.log(Level.SEVERE,
+                    "Collector failed for node: " + node.getNodeId(), e);
         }
-
-        return allCdrs;
     }
 
-    // ── Private Helpers ──────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────
+    // CORE LOGIC 
+    // ─────────────────────────────────────────────
 
-    /**
-     * Scans the node's input directory for CSV files and parses each one.
-     */
     private List<CDR> collectFromNode(Node node) throws Exception {
+
         List<CDR> cdrs = new ArrayList<>();
 
         File inputDir = new File(node.getInputDirectory());
+
         if (!inputDir.exists() || !inputDir.isDirectory()) {
-            LOG.warning("Input directory not found for node " + node.getNodeId()
-                    + ": " + node.getInputDirectory());
+            LOG.warning("Directory not found: " + node.getInputDirectory());
             return cdrs;
         }
 
         File[] csvFiles = inputDir.listFiles(
-                (dir, name) -> name.toLowerCase().endsWith(".csv"));
+                (dir, name) -> name.toLowerCase().endsWith(".csv")
+        );
 
         if (csvFiles == null || csvFiles.length == 0) {
-            LOG.info("No CSV files found for node: " + node.getNodeId());
+            LOG.info("No CSV files for node: " + node.getNodeId());
             return cdrs;
         }
 
         for (File csvFile : csvFiles) {
             try {
-                LOG.info("Processing file: " + csvFile.getName());
+                LOG.info("Processing: " + csvFile.getName());
+                
+                //call the cdr parser ( file.csv -> cdr objects ) 
                 List<CDR> parsed = CsvUtil.parseCdrFile(csvFile, node);
+
                 cdrs.addAll(parsed);
+
                 archiveFile(csvFile);
+
             } catch (Exception e) {
-                LOG.log(Level.WARNING, "Failed to parse file: " + csvFile.getName(), e);
+                LOG.log(Level.WARNING,
+                        "Failed file: " + csvFile.getName(), e);
             }
         }
 
         return cdrs;
     }
 
-    /**
-     * Moves a processed file into an "archive" sub-directory.
-     */
     private void archiveFile(File file) {
+
         File archiveDir = new File(file.getParent(), ARCHIVE_DIR);
+
+         //create the archive directory in the mediation container 
         if (!archiveDir.exists()) {
             archiveDir.mkdirs();
         }
+
         File dest = new File(archiveDir, file.getName());
+
         if (!file.renameTo(dest)) {
-            LOG.warning("Could not archive file: " + file.getName());
+            LOG.warning("Archive failed: " + file.getName());
         } else {
             LOG.info("Archived: " + file.getName());
         }

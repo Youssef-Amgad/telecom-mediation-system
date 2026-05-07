@@ -31,7 +31,7 @@ public class Main {
         DBManager db = new DBManager();
 
         try {
-            // ── Step 1: Connect to DB and load configuration ──────────────────
+            // Step 1: Connect to DB and load configuration 
             db.connect();
 
             List<Node>           nodes = db.loadNodes();
