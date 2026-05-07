@@ -14,7 +14,6 @@ import java.util.stream.Collectors;
 /**
  * Core routing engine.
  *
- * For each CDR it selects the highest-priority matching {@link MediationRule},
  * then either drops the CDR, routes it via the appropriate {@link Sender}, or
  * transforms it before routing.
  *
