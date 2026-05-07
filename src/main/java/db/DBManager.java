@@ -13,16 +13,16 @@ public class DBManager {
 
     private static final Logger LOG = Logger.getLogger(DBManager.class.getName());
 
-    private static final String DB_URL =
-            "jdbc:postgresql://ep-restless-bread-aqsbn9f0-pooler.c-8.us-east-1.aws.neon.tech/neondb?sslmode=require&channelBinding=require";
+    private static final String DB_URL
+            = "jdbc:postgresql://ep-restless-bread-aqsbn9f0-pooler.c-8.us-east-1.aws.neon.tech/neondb"
+            + "?sslmode=require&channelBinding=require";
 
     private static final String DB_USER = "neondb_owner";
-    private static final String DB_PASS = "YOUR_PASSWORD_HERE"; // move to env later
+    private static final String DB_PASS = "npg_8cmBtYE9TynD"; // your real password
 
     private Connection connection;
 
     // ── Connect / Disconnect ──────────────────────────────────────────────────
-
     public void connect() throws SQLException {
         LOG.info("Connecting to database...");
         connection = DriverManager.getConnection(DB_URL, DB_USER, DB_PASS);
@@ -42,7 +42,6 @@ public class DBManager {
     }
 
     // ── NODES ─────────────────────────────────────────────────────────────────
-
     public List<Node> loadNodes() throws SQLException {
 
         List<Node> nodes = new ArrayList<>();
@@ -57,8 +56,7 @@ public class DBManager {
                 ORDER BY node_id
                 """;
 
-        try (PreparedStatement ps = connection.prepareStatement(sql);
-             ResultSet rs = ps.executeQuery()) {
+        try (PreparedStatement ps = connection.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
 
             while (rs.next()) {
 
@@ -82,7 +80,6 @@ public class DBManager {
     }
 
     // ── MEDIATION RULES ───────────────────────────────────────────────────────
-
     public List<MediationRule> loadRules() throws SQLException {
 
         List<MediationRule> rules = new ArrayList<>();
@@ -95,8 +92,7 @@ public class DBManager {
                 FROM mediation_rules
                 """;
 
-        try (PreparedStatement ps = connection.prepareStatement(sql);
-             ResultSet rs = ps.executeQuery()) {
+        try (PreparedStatement ps = connection.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
 
             while (rs.next()) {
 
@@ -115,7 +111,6 @@ public class DBManager {
     }
 
     // ── HEALTH CHECK ──────────────────────────────────────────────────────────
-
     public boolean isHealthy() {
         try {
             return connection != null
