@@ -78,7 +78,8 @@ src/
 ## Team Members
 
 - Youssef Amgad
-- Team Members Names
+- Fady Mohamed
+- Omar mahmoud
 
 ---
 
