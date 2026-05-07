@@ -114,4 +114,3 @@ public class CDR {
                 cdrId, nodeId, callingParty, calledParty, callType, durationSeconds);
     }
 }
-

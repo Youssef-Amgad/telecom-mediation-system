@@ -1,4 +1,3 @@
-
 package main;
 
 import collector.NodeCollector;
@@ -10,9 +9,8 @@ import model.Node;
 import routing.RoutingEngine;
 import sender.SenderFactory;
 
-import java.sql.SQLException;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -21,79 +19,71 @@ public class Main {
     private static final Logger LOG = Logger.getLogger(Main.class.getName());
 
     public static void main(String[] args) {
-        LOG.info("════════════════════════════════════════");
-        LOG.info("  CDR Mediation System  –  Starting up  ");
-        LOG.info("════════════════════════════════════════");
 
-        String runId = UUID.randomUUID().toString();
-        LOG.info("Run ID: " + runId);
+        LOG.info("=== MEDIATION START ===");
 
         DBManager db = new DBManager();
+        Queue<List<CDR>> queue = new ConcurrentLinkedQueue<>();
 
         try {
-            // Step 1: Connect to DB and load configuration 
             db.connect();
 
-            List<Node>           nodes = db.loadNodes();
-            List<MediationRule>  rules = db.loadRules();
+            List<Node> nodes = db.loadNodes();
+            List<MediationRule> rules = db.loadRules();
 
-            if (nodes.isEmpty()) {
-                LOG.warning("No active nodes found – nothing to collect. Exiting.");
+            // ── START COLLECTOR THREADS (UPSTREAM nodes only) ─────────────────
+            List<Thread> threads = new ArrayList<>();
+
+            for (Node node : nodes) {
+                if (!"UPSTREAM".equalsIgnoreCase(node.getNodeType())) {
+                    continue;
+                }
+
+                NodeCollector collector = new NodeCollector(node, queue);
+                Thread t = new Thread(collector);
+                t.setName("Collector-" + node.getNodeId());
+                threads.add(t);
+                t.start();
+            }
+
+            if (threads.isEmpty()) {
+                LOG.warning("No upstream nodes found — nothing to do.");
                 return;
             }
 
-            // ── Step 2: Collect CDR files from nodes ──────────────────────────
-            NodeCollector collector = new NodeCollector(nodes);
-            List<CDR>     rawCdrs  = collector.collectAll();
+            // ── PROCESSING PIPELINE ───────────────────────────────────────────
+            CDRFilter filter     = new CDRFilter();
+            // pass all nodes so RoutingEngine can resolve destination nodes
+            RoutingEngine router = new RoutingEngine(rules, nodes, new SenderFactory());
 
-            LOG.info(String.format("Collection complete: %d raw CDRs", rawCdrs.size()));
+            while (true) {
 
-            if (rawCdrs.isEmpty()) {
-                LOG.info("No CDRs collected – nothing to process. Exiting.");
-                db.insertRunSummary(runId, 0, 0, 0, 0);
-                return;
+                // check if all collector threads are done AND queue is empty
+                boolean allDone = threads.stream().noneMatch(Thread::isAlive);
+
+                List<CDR> batch = queue.poll();
+
+                if (batch == null) {
+                    if (allDone) {
+                        LOG.info("All collectors finished and queue is empty — done.");
+                        break;
+                    }
+                    Thread.sleep(300);
+                    continue;
+                }
+
+                LOG.info("Main got batch of " + batch.size());
+
+                List<CDR> filtered = filter.applyFilters(batch);
+                router.routeAll(filtered);
             }
 
-            // ── Step 3: Filter CDRs ───────────────────────────────────────────
-            CDRFilter  filter     = new CDRFilter();
-            List<CDR>  passedCdrs = filter.applyFilters(rawCdrs);
-
-            LOG.info(String.format("Filtering complete: %d / %d CDRs passed",
-                    passedCdrs.size(), rawCdrs.size()));
-
-            // ── Step 4: Route CDRs ────────────────────────────────────────────
-            SenderFactory  senderFactory = new SenderFactory();
-            RoutingEngine  router        = new RoutingEngine(rules, senderFactory);
-
-            router.routeAll(passedCdrs);
-
-            int deadLetterCount = router.getDeadLetterQueue().size();
-            int routedCount     = passedCdrs.size() - deadLetterCount;
-
-            if (deadLetterCount > 0) {
-                LOG.warning(deadLetterCount + " CDR(s) could not be routed and are in the dead-letter queue.");
-            }
-
-            // ── Step 5: Persist run summary ───────────────────────────────────
-            db.insertRunSummary(runId,
-                    rawCdrs.size(),
-                    passedCdrs.size(),
-                    routedCount,
-                    deadLetterCount);
-
-            LOG.info("════════════════════════════════════════");
-            LOG.info(String.format("  Run complete │ Collected: %d │ Passed: %d │ Routed: %d │ DeadLetter: %d",
-                    rawCdrs.size(), passedCdrs.size(), routedCount, deadLetterCount));
-            LOG.info("════════════════════════════════════════");
-
-        } catch (SQLException e) {
-            LOG.log(Level.SEVERE, "Database error during mediation run", e);
-            System.exit(1);
         } catch (Exception e) {
-            LOG.log(Level.SEVERE, "Unexpected error during mediation run", e);
-            System.exit(2);
+            LOG.log(Level.SEVERE, "Fatal error", e);
         } finally {
             db.disconnect();
         }
+
+        LOG.info("=== MEDIATION END ===");
     }
 }

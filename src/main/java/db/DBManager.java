@@ -1,7 +1,6 @@
 package db;
 
 import model.MediationRule;
-//import model.MediationRule.Action;
 import model.Node;
 
 import java.sql.*;
@@ -22,7 +21,8 @@ public class DBManager {
 
     private Connection connection;
 
-    // Connect
+    // ── Connect / Disconnect ──────────────────────────────────────────────────
+
     public void connect() throws SQLException {
         LOG.info("Connecting to database...");
         connection = DriverManager.getConnection(DB_URL, DB_USER, DB_PASS);
@@ -41,18 +41,17 @@ public class DBManager {
         }
     }
 
-    // ─────────────────────────────────────────────
-    // NODES
-    // ─────────────────────────────────────────────
+    // ── NODES ─────────────────────────────────────────────────────────────────
 
     public List<Node> loadNodes() throws SQLException {
 
         List<Node> nodes = new ArrayList<>();
 
+        // column alias matches what we read below: input_dir aliased as input_directory
         String sql = """
                 SELECT node_id, node_name, node_type,
                        ip_address, port, protocol,
-                       input_dir, active
+                       input_dir AS input_directory, active
                 FROM nodes
                 WHERE active = TRUE
                 ORDER BY node_id
@@ -74,7 +73,6 @@ public class DBManager {
                 );
 
                 node.setActive(rs.getBoolean("active"));
-
                 nodes.add(node);
             }
         }
@@ -83,18 +81,17 @@ public class DBManager {
         return nodes;
     }
 
-    // ─────────────────────────────────────────────
-    // MEDIATION RULES
-    // ─────────────────────────────────────────────
+    // ── MEDIATION RULES ───────────────────────────────────────────────────────
 
     public List<MediationRule> loadRules() throws SQLException {
 
         List<MediationRule> rules = new ArrayList<>();
 
+        // removed the trailing comma that caused a SQL syntax error
         String sql = """
                 SELECT rule_id,
                        source_node_id,
-                       destination_node_id,
+                       destination_node_id
                 FROM mediation_rules
                 """;
 
@@ -108,15 +105,6 @@ public class DBManager {
                         rs.getInt("source_node_id"),
                         rs.getInt("destination_node_id")
                 );
-                rule.setRuleId(rs.getInt("rule_id"));
-                rule.setSourceNodeId(rs.getInt("source_node_id"));
-                rule.setDestinationNodeId(rs.getInt("destination_node_id"));
-               
-//                rule.setCallType(rs.getString("call_type"));
-//                rule.setAction(Action.valueOf(rs.getString("action")));
-//                rule.setPriority(rs.getInt("priority"));
-//                rule.setTransformExpression(rs.getString("transform_expression"));
-//                rule.setActive(rs.getBoolean("active"));
 
                 rules.add(rule);
             }
@@ -126,40 +114,7 @@ public class DBManager {
         return rules;
     }
 
-    // ─────────────────────────────────────────────
-    // AUDIT / RUN LOG
-    // ─────────────────────────────────────────────
-/*
-    public void insertRunSummary(String runId,
-                                 int totalRead,
-                                 int totalPassed,
-                                 int totalRouted,
-                                 int totalDead) {
-
-        String sql = """
-                INSERT INTO mediation_run_log
-                (run_id, run_time, total_read, total_passed, total_routed, total_dead)
-                VALUES (?, NOW(), ?, ?, ?, ?)
-                """;
-
-        try (PreparedStatement ps = connection.prepareStatement(sql)) {
-
-            ps.setString(1, runId);
-            ps.setInt(2, totalRead);
-            ps.setInt(3, totalPassed);
-            ps.setInt(4, totalRouted);
-            ps.setInt(5, totalDead);
-
-            ps.executeUpdate();
-
-        } catch (SQLException e) {
-            LOG.log(Level.WARNING, "Failed to insert run summary", e);
-        }
-    }
-*/
-    // ─────────────────────────────────────────────
-    // HEALTH CHECK
-    // ─────────────────────────────────────────────
+    // ── HEALTH CHECK ──────────────────────────────────────────────────────────
 
     public boolean isHealthy() {
         try {
