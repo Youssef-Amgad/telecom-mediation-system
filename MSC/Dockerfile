@@ -2,19 +2,26 @@ FROM eclipse-temurin:17
 
 WORKDIR /app
 
+# Install FTP server
 RUN apt-get update && apt-get install -y vsftpd
 
+# Create CDR directory
 RUN mkdir -p /app/cdr
 
 # ─────────────────────────────
-# USERS (MATCH DB EXACTLY)
+# COPY YOUR GENERATOR JAR
+# ─────────────────────────────
+COPY MSC/target/MSC-1.0-SNAPSHOT.jar app.jar
+
+# ─────────────────────────────
+# USERS
 # ─────────────────────────────
 RUN useradd -m msc_user && echo "msc_user:msc_pass" | chpasswd
 RUN useradd -m smsc_user && echo "smsc_user:smsc_pass" | chpasswd
 RUN useradd -m pgw_user && echo "pgw_user:pgw_pass" | chpasswd
 
 # ─────────────────────────────
-# FTP CONFIG (DOCKER SAFE)
+# FTP CONFIG
 # ─────────────────────────────
 RUN echo "listen=YES" > /etc/vsftpd.conf && \
     echo "anonymous_enable=NO" >> /etc/vsftpd.conf && \
@@ -31,4 +38,7 @@ RUN chmod -R 777 /app/cdr
 
 EXPOSE 21 30000-30009
 
-CMD service vsftpd start && tail -f /dev/null
+# ─────────────────────────────
+# START FTP + JAVA GENERATOR
+# ─────────────────────────────
+CMD bash -c "service vsftpd start && java -jar app.jar"
