@@ -20,7 +20,7 @@ public class FtpSender implements Sender {
     private static final Logger LOG = Logger.getLogger(FtpSender.class.getName());
 
     private static final String PROTOCOL   = "FTP";
-    private static final String REMOTE_DIR = "/app/cdr/";
+    private static final String REMOTE_DIR = "/";
 
     @Override
     public String getProtocol() {

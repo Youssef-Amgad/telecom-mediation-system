@@ -1,4 +1,4 @@
-docker network create cdr-net
+#docker network create cdr-net
 
 
 
@@ -24,7 +24,7 @@ docker run -d \
 docker run -d \
   --name Billing \
   --network cdr-net \
-  omargabr0/down_stream_nodegit :v1
+  omargabr0/down_stream_node:v1docker
 
 
 #run for mediation 

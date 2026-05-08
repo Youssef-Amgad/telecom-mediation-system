@@ -17,6 +17,7 @@ public class NodeCollector implements Runnable {
     private static final Logger LOG = Logger.getLogger(NodeCollector.class.getName());
 
     private static final int BATCH_SIZE = 50;
+    private static final int SLEEP_MS = 3000;
 
     private final Node node;
     private final BlockingQueue<List<CDR>> sharedQueue;
@@ -33,12 +34,15 @@ public class NodeCollector implements Runnable {
 
         while (!Thread.currentThread().isInterrupted()) {
 
-            try {
+            FTPClient ftp = null;
 
-                List<File> remoteFiles = fetchRemoteFiles();
+            try {
+                ftp = connect();
+
+                List<File> remoteFiles = fetchRemoteFiles(ftp);
 
                 if (remoteFiles.isEmpty()) {
-                    Thread.sleep(3000);
+                    Thread.sleep(SLEEP_MS);
                     continue;
                 }
 
@@ -58,7 +62,8 @@ public class NodeCollector implements Runnable {
                         }
                     }
 
-                    archiveRemote(file);
+                    deleteRemoteFile(ftp, file.getName());
+                    file.delete();
                 }
 
                 if (!batch.isEmpty()) {
@@ -66,44 +71,33 @@ public class NodeCollector implements Runnable {
                 }
 
             } catch (Exception e) {
-                LOG.severe("Collector error: " + node.getNodeName() + " -> " + e.getMessage());
+                LOG.severe("Collector error [" + node.getNodeName() + "]: " + e.getMessage());
 
                 try {
                     Thread.sleep(5000);
                 } catch (InterruptedException ex) {
                     Thread.currentThread().interrupt();
                 }
+
+            } finally {
+                disconnect(ftp);
             }
         }
     }
 
     // ─────────────────────────────────────────────
-    // FETCH FILES
+    // CONNECT
     // ─────────────────────────────────────────────
 
-    private List<File> fetchRemoteFiles() throws Exception {
-
-        String host = node.getIpAddress();   // MUST be container name
-        int port = 21;                       // ALWAYS internal FTP port
-
-        return fetchViaFTP(host, port, node);
-    }
-
-    // ─────────────────────────────────────────────
-    // FTP FIXED
-    // ─────────────────────────────────────────────
-
-    private List<File> fetchViaFTP(String host, int port, Node node) throws Exception {
-
-        List<File> downloaded = new ArrayList<>();
+    private FTPClient connect() throws Exception {
 
         FTPClient ftp = new FTPClient();
 
         ftp.setConnectTimeout(5000);
-        ftp.connect(host, port);
+        ftp.connect(node.getIpAddress(), 21); // ALWAYS internal docker FTP port
 
         if (!ftp.login(node.getAuthUsername(), node.getAuthPassword())) {
-            throw new RuntimeException("FTP login failed: " + host);
+            throw new RuntimeException("FTP login failed for " + node.getNodeName());
         }
 
         ftp.enterLocalPassiveMode();
@@ -113,38 +107,64 @@ public class NodeCollector implements Runnable {
             throw new RuntimeException("Directory not found: " + node.getInputDirectory());
         }
 
+        return ftp;
+    }
+
+    // ─────────────────────────────────────────────
+    // FETCH FILES
+    // ─────────────────────────────────────────────
+
+    private List<File> fetchRemoteFiles(FTPClient ftp) throws Exception {
+
+        List<File> downloaded = new ArrayList<>();
+
         var files = ftp.listFiles();
 
         if (files == null || files.length == 0) {
-            LOG.info("No files in " + host);
-            ftp.logout();
-            ftp.disconnect();
             return downloaded;
         }
 
         for (var remoteFile : files) {
 
             if (!remoteFile.isFile()) continue;
+            if (remoteFile.getSize() <= 0) continue;
 
-            File local = File.createTempFile("recv_", ".csv");
+            File local = File.createTempFile("cdr_", ".csv");
 
             try (OutputStream out = new FileOutputStream(local)) {
+
                 boolean ok = ftp.retrieveFile(remoteFile.getName(), out);
 
                 if (ok) {
                     downloaded.add(local);
                 } else {
-                    LOG.warning("Failed to download: " + remoteFile.getName());
+                    LOG.warning("Failed download: " + remoteFile.getName());
                 }
             }
         }
 
-        ftp.logout();
-        ftp.disconnect();
-
         return downloaded;
     }
 
+    // ─────────────────────────────────────────────
+    // DELETE REMOTE FILE
+    // ─────────────────────────────────────────────
+
+    private void deleteRemoteFile(FTPClient ftp, String fileName) {
+        try {
+            boolean ok = ftp.deleteFile(fileName);
+
+            if (!ok) {
+                LOG.warning("Could not delete remote file: " + fileName);
+            }
+
+        } catch (Exception e) {
+            LOG.warning("Error deleting remote file: " + fileName);
+        }
+    }
+
+    // ─────────────────────────────────────────────
+    // PIPELINE
     // ─────────────────────────────────────────────
 
     private void flush(List<CDR> batch) {
@@ -152,9 +172,16 @@ public class NodeCollector implements Runnable {
         LOG.info("Pushed batch: " + batch.size());
     }
 
-    private void archiveRemote(File file) {
-        if (!file.delete()) {
-            LOG.warning("Temp file not deleted: " + file.getName());
-        }
+    // ─────────────────────────────────────────────
+    // CLEANUP
+    // ─────────────────────────────────────────────
+
+    private void disconnect(FTPClient ftp) {
+        try {
+            if (ftp != null && ftp.isConnected()) {
+                ftp.logout();
+                ftp.disconnect();
+            }
+        } catch (Exception ignored) {}
     }
 }
