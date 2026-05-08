@@ -1,21 +1,31 @@
 docker network create cdr-net
 
 
-# run for upstream nodes with FTP protocol 
+
+
+#run for MSC 
 docker run -d \
   --name MSC \
   --network cdr-net \
-  -p 21:21 \
-  -p 30000-30009:30000-30009 \
   omargabr0/mediation-upstream:v1
-#run for SMSC
+
 
 docker run -d \
   --name SMSC \
   --network cdr-net \
-  -p 2121:21 \
-  -p 30010-30019:30000-30009 \
   omargabr0/mediation-upstream:v1
+
+docker run -d \
+  --name PGW \
+  --network cdr-net \
+  omargabr0/mediation-upstream:v1
+
+#billing 
+docker run -d \
+  --name Billing \
+  --network cdr-net \
+  omargabr0/down_stream_nodegit :v1
+
 
 #run for mediation 
 docker run -d \

@@ -7,32 +7,37 @@ public class Node {
 
     private String nodeId;
     private String nodeName;
-    private String nodeType;   // "MSC", "SGSN", "GGSN", "SMSC"
+    private String nodeType; //MSC SMSc ,...
     private String ipAddress;
-    private String port;       // 
-    private String protocol;   // "SFTP", "FTP", "SCP"
+    private String port;
+    private String protocol;
     private String inputDirectory;
+    private String authUsername;
+    private String authPassword;
     private boolean active;
 
     public Node() {}
 
     public Node(String nodeId,
-                String nodeName,
-                String nodeType,
-                String ipAddress,
-                String port,         
-                String protocol,
-                String inputDirectory) {
+             String nodeName,
+             String nodeType,
+             String ipAddress,
+             String port,
+             String protocol,
+             String inputDirectory,
+             String authUsername,
+             String authPassword) {
 
-        this.nodeId = nodeId;
-        this.nodeName = nodeName;
-        this.nodeType = nodeType;
-        this.ipAddress = ipAddress;
-        this.port = port;
-        this.protocol = protocol;
-        this.inputDirectory = inputDirectory;
-        this.active = true;
-    }
+     this.nodeId = nodeId;
+     this.nodeName = nodeName;
+     this.nodeType = nodeType;
+     this.ipAddress = ipAddress;
+     this.port = port;
+     this.protocol = protocol;
+     this.inputDirectory = inputDirectory;
+     this.authUsername = authUsername;
+     this.authPassword = authPassword;
+ }
 
     // ── Getters & Setters ─────────────────────
 
@@ -99,6 +104,17 @@ public class Node {
     public void setActive(boolean active) {
         this.active = active;
     }
+
+    public void setAuthUsername(String authUsername) {
+        this.authUsername = authUsername;
+    }
+
+    public void setAuthPassword(String authPassword) {
+        this.authPassword = authPassword;
+    }
+    
+    public String getAuthUsername() { return authUsername; }
+    public String getAuthPassword() { return authPassword; }
 
     @Override
     public String toString() {

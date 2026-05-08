@@ -99,7 +99,7 @@ public final class CsvUtil {
 
         return cdr;
     }
-
+    // takes the list of CDRS , Node IP as string named prefix
     public static File writeCdrsToTempFile(List<CDR> cdrs, String prefix) throws IOException {
 
         File tempFile = File.createTempFile(prefix + "_", ".csv");

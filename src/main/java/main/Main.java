@@ -10,7 +10,7 @@ import routing.RoutingEngine;
 import sender.SenderFactory;
 
 import java.util.*;
-import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -23,7 +23,11 @@ public class Main {
         LOG.info("=== MEDIATION START ===");
 
         DBManager db = new DBManager();
-        Queue<List<CDR>> queue = new ConcurrentLinkedQueue<>();
+
+        // ✔ FIX: use BlockingQueue (correct producer-consumer model)
+        BlockingQueue<List<CDR>> queue = new LinkedBlockingQueue<>();
+
+        List<Thread> collectorThreads = new ArrayList<>();
 
         try {
             db.connect();
@@ -31,59 +35,63 @@ public class Main {
             List<Node> nodes = db.loadNodes();
             List<MediationRule> rules = db.loadRules();
 
-            // ── START COLLECTOR THREADS (UPSTREAM nodes only) ─────────────────
-            List<Thread> threads = new ArrayList<>();
-
+            // ── START COLLECTORS (UPSTREAM ONLY) ─────────────────────────────
             for (Node node : nodes) {
+
                 if (!"UPSTREAM".equalsIgnoreCase(node.getNodeType())) {
                     continue;
                 }
 
                 NodeCollector collector = new NodeCollector(node, queue);
+
                 Thread t = new Thread(collector);
-                t.setName("Collector-" + node.getNodeId());
-                threads.add(t);
+                t.setName("Collector-" + node.getNodeName());
                 t.start();
+
+                collectorThreads.add(t);
+
+                LOG.info("Started collector for node: " + node.getNodeName());
             }
 
-            if (threads.isEmpty()) {
-                LOG.warning("No upstream nodes found — nothing to do.");
+            if (collectorThreads.isEmpty()) {
+                LOG.warning("No upstream nodes found — exiting.");
                 return;
             }
 
-            // ── PROCESSING PIPELINE ───────────────────────────────────────────
-            CDRFilter filter     = new CDRFilter();
-            // pass all nodes so RoutingEngine can resolve destination nodes
-            RoutingEngine router = new RoutingEngine(rules, nodes, new SenderFactory());
+            // ── PIPELINE COMPONENTS ──────────────────────────────────────────
+            CDRFilter filter = new CDRFilter();
+            RoutingEngine router = new RoutingEngine(
+                    rules,
+                    nodes,
+                    new SenderFactory()
+            );
 
+            // ── MAIN PROCESSING LOOP ────────────────────────────────────────
             while (true) {
 
-                // check if all collector threads are done AND queue is empty
-                boolean allDone = threads.stream().noneMatch(Thread::isAlive);
+                // ✔ BLOCKING (no CPU waste)
+                List<CDR> batch = queue.take();
 
-                List<CDR> batch = queue.poll();
-
-                if (batch == null) {
-                    if (allDone) {
-                        LOG.info("All collectors finished and queue is empty — done.");
-                        break;
-                    }
-                    Thread.sleep(300);
-                    continue;
-                }
-
-                LOG.info("Main got batch of " + batch.size());
+                LOG.info("Main received batch of size: " + batch.size());
 
                 List<CDR> filtered = filter.applyFilters(batch);
+
                 router.routeAll(filtered);
             }
 
         } catch (Exception e) {
-            LOG.log(Level.SEVERE, "Fatal error", e);
-        } finally {
-            db.disconnect();
-        }
+            LOG.log(Level.SEVERE, "Fatal error in mediation engine", e);
 
-        LOG.info("=== MEDIATION END ===");
+        } finally {
+
+            db.disconnect();
+
+            // optional graceful shutdown
+            for (Thread t : collectorThreads) {
+                t.interrupt();
+            }
+
+            LOG.info("=== MEDIATION END ===");
+        }
     }
 }
